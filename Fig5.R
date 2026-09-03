@@ -1,4 +1,7 @@
-
+# SHORT-TERM ACCUMULATION AND DIVERSITY DYNAMICS
+# MS FIGURES
+# MJ OLMO-UCEDA
+################################################################################
 # TO ADD IN FIG 5
 # FIXED SCALING FOR FIG 5 + KDE OVERLAY
 

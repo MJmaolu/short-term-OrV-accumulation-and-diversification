@@ -175,3 +175,15 @@ anova(lmer(mean_Sn ~ rna + hpi + strand + (1|sample), data = df_complete.normH.s
 lmerTest::lmer(mean_Sn ~ rna * hpi * strand + (1 | sample), data = df_complete.normH.summary.long) %>%
   summary()
 
+## PER POSITION
+lmer(norm.H ~ strand * hpi + (1 | pos) + (1 | sample), 
+     data = df_complete.normH %>% 
+       filter(hpi > 2, 
+              rna == "RNA 1")) %>%
+  summary()
+
+lmer(norm.H ~ strand * hpi + (1 | pos) + (1 | sample), 
+     data = df_complete.normH %>% 
+       filter(hpi > 2, 
+              rna == "RNA 2")) %>%
+  summary()

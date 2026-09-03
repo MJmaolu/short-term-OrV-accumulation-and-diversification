@@ -152,3 +152,26 @@ samples.VPMV.shannon %>%
         axis.text = element_text(color = "black"),
         panel.border = element_rect(colour = "black",
                                     fill = "transparent"))
+
+
+## STATS
+
+lme4::lmer(mean_Sn ~ rna * hpi * strand + (1 | sample), data = df_complete.normH.summary.long) %>%
+  summary()
+
+lmer(mean_Sn ~ rna * hpi * strand + (1 | sample), data = df_complete.normH.summary.long) %>%
+  summary()
+
+lmer(mean_Sn ~ rna + hpi + strand + (1 | sample), data = df_complete.normH.summary.long) %>%
+  summary()
+
+# An interaction model is better than a model that only takes the adition
+AIC(lmer(mean_Sn ~ rna + hpi + strand + (1|sample), data = df_complete.normH.summary.long), 
+      lmer(mean_Sn ~ rna * hpi * strand + (1|sample), data = df_complete.normH.summary.long))
+anova(lmer(mean_Sn ~ rna + hpi + strand + (1|sample), data = df_complete.normH.summary.long), 
+    lmer(mean_Sn ~ rna * hpi * strand + (1|sample), data = df_complete.normH.summary.long))
+
+## FINAL STATS
+lmerTest::lmer(mean_Sn ~ rna * hpi * strand + (1 | sample), data = df_complete.normH.summary.long) %>%
+  summary()
+

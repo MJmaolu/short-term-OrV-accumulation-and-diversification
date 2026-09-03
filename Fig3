@@ -1,0 +1,554 @@
+###############################################
+# MEAN RESIDUALS PER POSITION
+###############################################
+# # Colapsar tiempos
+# meanResiduals.df <- df_complete.normH_wider %>%
+#   filter(hpi > 2) %>%
+#   group_by(rna, pos, hpi) %>%
+#   summarise(meanResidual = mean(Sn.residuals, na.rm = TRUE),
+#             .groups = "drop") %>%
+#   group_by(rna, pos) %>%
+#   summarise(meanResidual = mean(meanResidual, na.rm = TRUE),
+#             .groups = "drop")
+
+# Manteniendo todos los puntos
+meanResiduals.df <- df_complete.normH_wider %>%
+  filter(hpi > 2) %>%
+  group_by(rna, pos, hpi) %>%
+  summarise(meanResidual = mean(Sn.residuals, na.rm = TRUE),
+            .groups = "drop")
+
+###############################################
+# SEGMENT-SPECIFIC THRESHOLDS
+###############################################
+
+meanSnResiduals.quantiles.new <- meanResiduals.df %>%
+  group_by(rna) %>%
+  summarise(
+    Q1  = quantile(meanResidual, 0.25, na.rm = TRUE),
+    Q3  = quantile(meanResidual, 0.75, na.rm = TRUE),
+    P5  = quantile(meanResidual, 0.05, na.rm = TRUE),
+    P95 = quantile(meanResidual, 0.95, na.rm = TRUE),
+    P1  = quantile(meanResidual, 0.01, na.rm = TRUE),
+    P99 = quantile(meanResidual, 0.99, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+###############################################
+# CLASSIFY POSITIONS
+###############################################
+
+meanResiduals.classified <- meanResiduals.df %>%
+  left_join(meanSnResiduals.quantiles.new,
+            by = "rna") %>%
+  mutate(class = case_when(
+    
+    meanResidual < P1 |
+      meanResidual > P99 ~ "extreme",
+    
+    meanResidual < P5 |
+      meanResidual > P95 ~ "strong",
+    
+    meanResidual < Q1 |
+      meanResidual > Q3 ~ "moderate",
+    
+    TRUE ~ "central"
+  ))
+
+###############################################
+# TOP PANEL
+###############################################
+
+p.top <- meanResiduals.classified %>%
+  ggplot(aes(x = pos,
+             y = meanResidual,
+             color = class)) +
+  
+  ###########################################
+# Coding regions
+###########################################
+
+  geom_rect(data = orv.proteins %>%
+              filter(protein != "putative"),
+            aes(xmin = start,
+                xmax = end,
+                ymin = -Inf,
+                ymax = Inf,
+                fill = protein),
+            alpha = 0.05,
+            inherit.aes = FALSE) +
+  
+  ###########################################
+# Palmprint motifs
+###########################################
+
+  geom_rect(data = palmprint.orv,
+            aes(xmin = nt.start,
+                xmax = nt.end,
+                ymin = -Inf,
+                ymax = Inf),
+            color = "black",
+            fill = "grey50",
+            alpha = 0.15,
+            linewidth = .05,
+            inherit.aes = FALSE) +
+  
+  ###########################################
+# Baseline
+###########################################
+
+  geom_hline(yintercept = 0,
+             linewidth = .2,
+             color = "black") +
+  
+  ###########################################
+# Segments from zero
+###########################################
+
+  geom_segment(aes(xend = pos,
+               y = 0,
+               yend = meanResidual),
+           linewidth = .12,
+           alpha = .25,
+           color = "black") +
+  
+
+  # Points
+  ###########################################
+  geom_point(size = .35,
+             alpha = .85) +
+  
+  # Colors
+  ###########################################
+  scale_color_manual(values = c(
+    central  = "grey90",
+    moderate = "grey55",
+    strong   = "#4a4e69",
+    extreme  = "#8792F1" #F2542D"
+  )) +
+  
+  scale_fill_manual(values = color.proteins) +
+  
+  ###########################################
+  # Labels
+  ###########################################
+  ylab(expression(
+    paste(bar(S[n]),
+          "(p) residuals (",
+          S[italic(np)]^"+",
+          " - ",
+          S[italic(np)]^"-",
+          ")")
+  )) +
+  scale_x_continuous(expand = c(0,0)) +
+  # scale_x_continuous(
+  #   breaks = seq(0, x.max, by = 1500)
+  # ) +
+  xlab("Genomic position (nt)") +
+  
+  # Facets
+  ###########################################
+  facet_grid(~rna,
+             scales = "free_x",
+             space = "free_x") +
+  
+
+  # Theme
+  ###########################################
+  theme_classic() +
+  
+  theme( 
+    legend.position = "none",
+    axis.text = element_text(color = "black"),
+    axis.line = element_blank(),
+    panel.border = element_rect(
+      colour = "black",
+      fill = NA
+    ),
+    axis.title.x = element_blank(),
+    
+  )
+
+
+###############################################
+# BOTTOM PANEL
+###############################################
+window.size <- 50
+step.size <- 20
+
+sliding.df <- meanResiduals.df %>%
+  group_by(rna) %>%
+  arrange(pos) %>%
+  group_modify(~{
+    
+    df <- .x
+    
+    max.pos <- max(df$pos, na.rm = TRUE)
+    
+    windows <- tibble(
+      window.start = seq(1, max.pos - window.size, by = step.size)
+    ) %>%
+      mutate(
+        window.end = window.start + window.size - 1
+      )
+    
+    windows %>%
+      rowwise() %>%
+      mutate(
+        mean.window.residual = mean(
+          df$meanResidual[
+            df$pos >= window.start &
+              df$pos <= window.end
+          ],
+          na.rm = TRUE
+        )
+      ) %>%
+      ungroup()
+    
+  }) %>%
+  ungroup()
+
+p.bottom <- sliding.df %>%
+  ggplot(aes(x = window.start,
+             y = mean.window.residual)) +
+  
+  ###########################################
+  # Coding regions
+  ###########################################
+  geom_rect(data = orv.proteins %>%
+              filter(protein != "putative"),
+            aes(xmin = start,
+                xmax = end,
+                ymin = -Inf,
+                ymax = Inf,
+                fill = protein),
+            alpha = 0.05,
+            inherit.aes = FALSE) +
+    
+
+  # Palmprint motifs
+  ###########################################
+  geom_rect(data = palmprint.orv,
+            aes(xmin = nt.start,
+                xmax = nt.end,
+                ymin = -Inf,
+                ymax = Inf),
+            color = "black",
+            fill = "grey50",
+            alpha = 0.15,
+            linewidth = 0.05,
+            inherit.aes = FALSE) +
+    
+  # Baseline
+  ###########################################
+  geom_hline(yintercept = 0,
+             linewidth = 0.25,
+             color = "black") +
+    
+
+  # Sliding window signal (SIGNED)
+  ###########################################
+  geom_line(linewidth = 0.4,
+            color = "black") +
+  
+
+  # Optional: highlight strong regions
+  ###########################################
+  geom_hline(yintercept = 0,
+             linewidth = 0.25,
+             color = "black") +
+  
+  scale_x_continuous(expand = c(0,0)) +
+  
+
+  # Fill mapping (same palette as top panel)
+  ###########################################
+  scale_fill_manual(values = color.proteins) +
+  
+
+  # Labels
+  ###########################################
+  ylab("Sliding-window mean residuals") +
+  xlab("Genomic position (nt)") +
+  # scale_x_continuous(
+  #   breaks = seq(0, x.max, by = 1500)
+  # ) +
+  
+  # Faceting
+  ###########################################
+  facet_grid(~rna,
+             scales = "free_x",
+             space = "free_x") +
+  
+  # Theme (matched to top panel)
+  ###########################################
+  theme_classic() +
+  
+  theme(
+    legend.position = "none",
+    axis.text = element_text(color = "black"),
+    axis.line = element_blank(),
+    panel.border = element_rect(
+      colour = "black",
+      fill = NA
+    ),
+    axis.title.x = element_blank(),
+    strip.text = element_blank()
+  )
+
+
+p.top / p.bottom +
+  plot_layout(heights = c(2, 1))
+
+
+
+p.mfe <-ggplot(rnafold.df %>%
+                 mutate(rna = ifelse(chrom == "RNA1",
+                                     "RNA 1",
+                                     "RNA 2")),
+               aes(x = window_mid,
+                   y = MFE_plot,
+                   color = strand,
+                   fill = strand)) +
+  # Coding regions
+  ###########################################
+  geom_rect(data = orv.proteins %>%
+              filter(protein != "putative"),
+            aes(xmin = start,
+                xmax = end,
+                ymin = -Inf,
+                ymax = Inf,
+                fill = protein),
+            alpha = 0.05,
+            inherit.aes = FALSE) +
+  
+  
+  # Palmprint motifs
+  ###########################################
+  geom_rect(data = palmprint.orv,
+            aes(xmin = nt.start,
+                xmax = nt.end,
+                ymin = -Inf,
+                ymax = Inf),
+            color = "black",
+            fill = "grey50",
+            alpha = 0.15,
+            linewidth = 0.05,
+            inherit.aes = FALSE) +
+  
+  # # high asymmetry regions (by windows without promediate)
+  # geom_rect(
+  #   data = high.diff %>%
+  #     mutate(rna = ifelse(chrom == "RNA1",
+  #                         "RNA 1",
+  #                         "RNA 2")),
+  #   inherit.aes = FALSE,
+  #   aes(
+  #     xmin = window_mid - 25,
+  #     xmax = window_mid + 25,
+  #     ymin = 20,
+  #     ymax = Inf
+  #   ),
+  #   fill = "gold",
+  #   alpha = 0.12
+  # ) +
+
+  # # Structural-bias hotspots
+  # ###########################################
+  geom_rect(
+    data = merged.df %>%
+      filter(mfe.hotspot),
+
+    inherit.aes = FALSE,
+
+    aes(
+      xmin = window.start,
+      xmax = window.end,
+      ymin = -Inf,
+      ymax = Inf
+    ),
+
+    fill = "gold",
+    alpha = 0.4
+  ) +
+  # uncertainty ribbon
+  geom_ribbon(
+    aes(
+      ymin = MFE_plot - diversity_scaled,
+      ymax = MFE_plot + diversity_scaled
+    ),
+    alpha = 0.7,
+    linewidth = 0
+  ) +
+  
+  geom_line(linewidth = 0.6) +
+  scale_x_continuous(expand = c(0,0)) +
+  
+  facet_grid( ~ rna,
+              scales = "free_x",
+              space = "free_x") +
+  
+  xlab("Genomic position (nt)") +
+  ylab("-MFE (kcal/mol)") +
+  
+  theme_classic() +
+  scale_color_manual(values = color.strand) +
+  scale_fill_manual(values = c(color.strand,
+                               color.proteins)) +
+  
+  theme(
+    legend.position = "none",
+    axis.text = element_text(color = "black"),
+    axis.line = element_blank(),
+    panel.border = element_rect(
+      colour = "black",
+      fill = NA
+    ),
+    #axis.title.x = element_blank(),
+    strip.text = element_blank()
+  )
+
+
+
+
+p.top / p.bottom / p.mfe +
+  plot_layout(heights = c(1.5, .5, 1))
+
+
+
+###############################################
+## STATS ##
+###############################################
+# STRUCTURE BIAS vs DIVERSITY BIAS
+###############################################
+
+cor.test(
+  merged.df$mean.window.residual,
+  merged.df$mfe.bias,
+  method = "spearman" # comment to have df
+)
+
+# d.f.
+merged.df %>% nrow() -2
+
+###############################################
+# MAGNITUDE ONLY
+###############################################
+
+cor.test(
+  abs(merged.df$mean.window.residual),
+  abs(merged.df$mfe.bias),
+  method = "spearman"
+)
+
+
+###############################################
+# PERMUTATION TEST
+###############################################
+
+obs <- cor(
+  abs(merged.df$mean.window.residual),
+  abs(merged.df$mfe.bias),
+  method = "spearman"
+)
+
+perm <- replicate(5000, {
+  
+  cor(
+    sample(abs(merged.df$mean.window.residual)),
+    abs(merged.df$mfe.bias),
+    method = "spearman"
+  )
+  
+})
+
+mean(abs(perm) >= abs(obs))
+
+
+###############################################
+# HOTSPOTS
+###############################################
+
+threshold <- quantile(
+  abs(merged.df$mean.window.residual),
+  0.95,
+  na.rm = TRUE
+)
+
+merged.df <- merged.df %>%
+  mutate(
+    hotspot = abs(mean.window.residual) >= threshold
+  )
+
+###############################################
+# DO HOTSPOTS HAVE HIGHER STRUCTURE BIAS?
+###############################################
+
+wilcox.test(
+  abs(mfe.bias) ~ hotspot,
+  data = merged.df
+)
+
+###############################################
+# LINEAR MODEL
+###############################################
+
+lm.bias <- lm(
+  abs(mean.window.residual) ~ abs(mfe.bias),
+  data = merged.df
+)
+
+summary(lm.bias)
+
+
+###############################################
+# GC AS CONFOUNDER
+###############################################
+
+lm.bias.gc <- lm(
+  abs(mean.window.residual) ~ abs(mfe.bias) + GC,
+  data = merged.df
+)
+
+summary(lm.bias.gc)
+
+library(mgcv)
+
+###############################################
+# NON-LINEAR MODEL
+###############################################
+
+gam.bias <- gam(
+  abs(mean.window.residual) ~
+    s(abs(mfe.bias)) +
+    s(GC),
+  data = merged.df
+)
+
+summary(gam.bias)
+
+
+# RNA1
+###############################################
+
+cor.test(
+  ~ (mean.window.residual) + (mfe.bias),
+  data = merged.df %>%
+    filter(rna == "RNA 1"),
+  #method = "spearman"
+)
+
+
+# RNA2
+###############################################
+
+cor.test(
+  ~ (mean.window.residual) + (mfe.bias),
+  data = merged.df %>%
+    filter(rna == "RNA 2") ,
+  #method = "spearman"
+) 
+
+## calc df: n -2
+merged.df %>%
+  filter(rna == "RNA 1") %>% nrow() -2

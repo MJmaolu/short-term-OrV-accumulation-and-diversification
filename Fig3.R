@@ -1,6 +1,9 @@
 ################################################################################
-# A) 
+# FIG3_Q20.R
+# MJ OLMO-UCEDA
+# 2026/11/17
 ################################################################################
+# FIG 3A) 
 ################################################################################
 # POSITION-WISE RESIDUALS
 ################################################################################
@@ -496,7 +499,7 @@ p.top / p.bottom / p.mfe +
 # Q20 REANALYSIS
 ################################################################################
 
-# Reproduces all statistics reported in the manuscript using:
+# Statistics reported in the manuscript using:
 #   - sliding.df.q20 (new diversity residuals)
 #   - rnafold.df      (unchanged structure predictions)
 #   - gc.df           (unchanged GC windows)
